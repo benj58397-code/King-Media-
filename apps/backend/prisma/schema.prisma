@@ -1,0 +1,358 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User and Authentication
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  username  String   @unique
+  fullName  String
+  password  String? // nullable for OAuth users
+  bio       String?
+  avatar    String?
+  coverImage String?
+  
+  // Profile modes
+  profileMode String @default("personal") // personal, creator, business, community
+  isVerified Boolean @default(false)
+  isCreator  Boolean @default(false)
+  
+  // Settings
+  privacyLevel String @default("public") // public, private, friends-only
+  emailVerified DateTime?
+  phoneNumber   String?
+  location      String?
+  website       String?
+  interests     String[] @default([])
+  skills        String[] @default([])
+  
+  // Security
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  posts Post[]
+  comments Comment[]
+  likes Like[]
+  followers Following[] @relation("followers")
+  following Following[] @relation("following")
+  blocks Block[] @relation("blocker")
+  blockedBy Block[] @relation("blocked")
+  messages Message[] @relation("sender")
+  receivedMessages Message[] @relation("recipient")
+  conversations Conversation[]
+  stories Story[]
+  videos Video[]
+  communityMemberships CommunityMember[]
+  liveStreams LiveStream[]
+  subscriptions Subscription[]
+  creatorProfile CreatorProfile?
+  notifications Notification[]
+  reports Report[] @relation("reporter")
+  moderationActions ModerationAction[] @relation("moderator")
+}
+
+model Following {
+  id String @id @default(cuid())
+  followerId String
+  follower User @relation("followers", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  
+  @@unique([followerId, followingId])
+}
+
+model Block {
+  id String @id @default(cuid())
+  blockerId String
+  blocker User @relation("blocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked User @relation("blocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  
+  @@unique([blockerId, blockedId])
+}
+
+// Posts and Content
+model Post {
+  id String @id @default(cuid())
+  content String
+  mediaUrls String[] @default([])
+  authorId String
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  
+  // Engagement
+  likes Like[]
+  comments Comment[]
+  shares Int @default(0)
+  
+  // Settings
+  isPublished Boolean @default(true)
+  visibility String @default("public") // public, friends-only, private
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([authorId])
+}
+
+model Comment {
+  id String @id @default(cuid())
+  content String
+  authorId String
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  postId String
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([authorId])
+  @@index([postId])
+}
+
+model Like {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  postId String
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, postId])
+  @@index([userId])
+  @@index([postId])
+}
+
+// Messaging
+model Message {
+  id String @id @default(cuid())
+  content String
+  mediaUrls String[] @default([])
+  senderId String
+  sender User @relation("sender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipientId String
+  recipient User @relation("recipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  conversationId String
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  isEdited Boolean @default(false)
+  isDeleted Boolean @default(false)
+  deletedAt DateTime?
+  expiresAt DateTime? // for disappearing messages
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([senderId])
+  @@index([conversationId])
+}
+
+model Conversation {
+  id String @id @default(cuid())
+  name String? // for group chats
+  isGroup Boolean @default(false)
+  members User[]
+  messages Message[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Stories
+model Story {
+  id String @id @default(cuid())
+  mediaUrl String
+  caption String?
+  authorId String
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  
+  views Int @default(0)
+  isPublished Boolean @default(true)
+  
+  createdAt DateTime @default(now())
+  expiresAt DateTime @default(dbgenerated("CURRENT_TIMESTAMP + INTERVAL '24 hours'"))
+  
+  @@index([authorId])
+}
+
+// Videos
+model Video {
+  id String @id @default(cuid())
+  title String
+  description String?
+  thumbnailUrl String?
+  videoUrl String
+  authorId String
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  
+  views Int @default(0)
+  likes Int @default(0)
+  duration Int // in seconds
+  
+  // Remixes/Duets
+  originalVideoId String?
+  remixes Video[] @relation("remixes")
+  remixedFrom Video? @relation("remixes", fields: [originalVideoId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([authorId])
+}
+
+// Communities
+model Community {
+  id String @id @default(cuid())
+  name String @unique
+  description String?
+  logoUrl String?
+  bannerUrl String?
+  creatorId String
+  
+  isPrivate Boolean @default(false)
+  rules String[] @default([])
+  
+  members CommunityMember[]
+  channels Channel[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CommunityMember {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  communityId String
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  
+  role String @default("member") // member, moderator, admin
+  
+  joinedAt DateTime @default(now())
+  
+  @@unique([userId, communityId])
+}
+
+model Channel {
+  id String @id @default(cuid())
+  name String
+  description String?
+  communityId String
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+}
+
+// Live Streaming
+model LiveStream {
+  id String @id @default(cuid())
+  title String
+  description String?
+  authorId String
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  
+  isActive Boolean @default(true)
+  viewers Int @default(0)
+  rtmpUrl String?
+  thumbnail String?
+  
+  startedAt DateTime @default(now())
+  endedAt DateTime?
+  
+  @@index([authorId])
+}
+
+// Creator Economy
+model CreatorProfile {
+  id String @id @default(cuid())
+  userId String @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  subscriptionPrice Float?
+  totalEarnings Float @default(0)
+  pendingEarnings Float @default(0)
+  
+  bankAccount String? // encrypted
+  payoutSchedule String @default("monthly")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Subscription {
+  id String @id @default(cuid())
+  subscriberId String
+  subscriber User @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  creatorId String
+  
+  tier Int @default(1)
+  status String @default("active") // active, cancelled, expired
+  
+  startDate DateTime @default(now())
+  renewalDate DateTime
+  
+  @@unique([subscriberId, creatorId])
+}
+
+// Safety & Moderation
+model Report {
+  id String @id @default(cuid())
+  reason String
+  description String?
+  contentId String
+  contentType String // post, comment, video, user
+  reporterId String
+  reporter User @relation("reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  
+  status String @default("pending") // pending, reviewing, resolved, dismissed
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@index([reporterId])
+}
+
+model ModerationAction {
+  id String @id @default(cuid())
+  targetId String // user or content ID
+  action String // remove, suspend, ban, warning
+  reason String?
+  moderatorId String
+  moderator User @relation("moderator", fields: [moderatorId], references: [id])
+  
+  duration Int? // in days, null for permanent
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+}
+
+// Notifications
+model Notification {
+  id String @id @default(cuid())
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type String // follow, like, comment, message, mention
+  title String
+  message String
+  link String?
+  
+  read Boolean @default(false)
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+}

@@ -1,3 +1,5 @@
+# .gitignore
+
 # Dependencies
 node_modules/
 .pnp
@@ -7,20 +9,17 @@ node_modules/
 coverage/
 .nyc_output/
 
-# Next.js
-.next/
-out/
-
 # Production
 build/
 dist/
+.next/
+out/
 
 # Misc
 .DS_Store
 .env
 .env.local
 .env.*.local
-*.log
 *.pem
 
 # Debug
@@ -31,7 +30,7 @@ yarn-error.log*
 # IDE
 .vscode/
 .idea/
-*.swp
+.swp
 *.swo
 *.iml
 
@@ -43,3 +42,6 @@ Thumbs.db
 # Cache
 .turbo/
 .eslintcache
+
+# Prisma
+prisma/migrations/
